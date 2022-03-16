@@ -1,17 +1,22 @@
+// Migrated from WebVR to WebXR: https://github.com/immersive-web/webxr/blob/master/webvr-migration.md
+
 // global variable that define in normal webview
 // use to avoid undefined crash
 var is_dolly = 0;
 var dolly = 1;
 var pivoting = -1;
 
+// TODO: check all vrDisplay, onResize
+
 $( document ).ready(function() {
   document.getElementById("glcanvas").remove();
   if (window.location.href.indexOf('http') == -1)
     window.location.href = (window.location.href.replace("file:///var/www/html", "http://localhost"));
 
-  var vrDisplay = null;
-  var frameData = null;
-  var projectionMat = mat4.create();
+  // var vrDisplay = null; // OLD
+  var xrSession = null;
+  // var frameData = null; // OLD
+  // var projectionMat = mat4.create(); // Doesn't appear to be used, even in original script?
   var identityMat = mat4.create();
   var vrPresentButton = null;
 
@@ -47,7 +52,7 @@ $( document ).ready(function() {
 
   function onContextRestored( event ) {
     console.log( 'WebGL Context Restored.' );
-    initWebGL(vrDisplay ? vrDisplay.capabilities.hasExternalDisplay : false);
+    initWebGL(false);
   }
 
   var webglCanvas = document.getElementById("webgl-canvas");
@@ -63,7 +68,8 @@ $( document ).ready(function() {
     var glAttribs = {
       alpha: false,
       antialias: true,
-      preserveDrawingBuffer: preserveDrawingBuffer
+      preserveDrawingBuffer: preserveDrawingBuffer,
+      xrCompatible: true, // NEW
     };
     var contextTypes = "webgl2";
     gl = webglCanvas.getContext("webgl2", glAttribs);
@@ -96,16 +102,21 @@ $( document ).ready(function() {
     }else{
       $("#msg").hide();
       //display VR button
-      if (vrDisplay.capabilities.canPresent)
+      // if (vrDisplay.capabilities.canPresent) // OLD
       vrPresentButton = VRSamplesUtil.addButton("Enter VR", "E", "css/google-cardboard.png", onVRRequestPresent);
 
-      // For the benefit of automated testing. Safe to ignore.
-      if (vrDisplay.capabilities.canPresent && WGLUUrl.getBool('canvasClickPresents', false))
-        webglCanvas.addEventListener("click", onVRRequestPresent, false);
+      // NEW: but not needed https://github.com/immersive-web/webxr/blob/master/webvr-migration.md#misc
+      // xrSession.addEventListener("end", onVRExitPresent, false);
 
-      window.addEventListener('vrdisplaypresentchange', onVRPresentChange, false);
-      window.addEventListener('vrdisplayactivate', onVRRequestPresent, false);
-      window.addEventListener('vrdisplaydeactivate', onVRExitPresent, false);
+      // OLD
+      // // For the benefit of automated testing. Safe to ignore.
+      // if (vrDisplay.capabilities.canPresent && WGLUUrl.getBool('canvasClickPresents', false))
+      //   webglCanvas.addEventListener("click", onVRRequestPresent, false);
+
+      // OLD
+      // window.addEventListener('vrdisplaypresentchange', onVRPresentChange, false); // Note that webXR no longer needs canvas resizing (which onVRPresentChange does)
+      // window.addEventListener('vrdisplayactivate', onVRRequestPresent, false);
+      // window.addEventListener('vrdisplaydeactivate', onVRExitPresent, false);
 
       window.requestAnimationFrame(onAnimationFrame);
     }
@@ -130,79 +141,99 @@ $( document ).ready(function() {
 
   function onVRRequestPresent () {
     resetPose();
-    vrDisplay.requestPresent([{ source: webglCanvas }]).then(function () {
-    }, function (err) {
-      var errMsg = "requestPresent failed.";
-      if (err && err.message) {
-        errMsg += "<br/>" + err.message
-      }
-      VRSamplesUtil.addError(errMsg, 2000);
-    });
+    // vrDisplay.requestPresent([{ source: webglCanvas }]).then(function () {
+    // }, function (err) {
+    //   var errMsg = "requestPresent failed.";
+    //   if (err && err.message) {
+    //     errMsg += "<br/>" + err.message
+    //   }
+    //   VRSamplesUtil.addError(errMsg, 2000);
+    // });
+    xrSession = await navigator.xr.requestSession('immersive-vr');
+    let xrLayer = new XRWebGLLayer(xrSession, gl);
+    session.updateRenderState({ baseLayer: xrLayer });
   }
 
-  function onVRExitPresent () {
-    if (!vrDisplay.isPresenting)
-      return;
+  // OLD
+  // function onVRExitPresent () {
+  //   if (!vrDisplay.isPresenting)
+  //     return;
 
-    vrDisplay.exitPresent().then(function () {
-    }, function () {
-      VRSamplesUtil.addError("exitPresent failed.", 2000);
-    });
-  }
+  //   vrDisplay.exitPresent().then(function () {
+  //   }, function () {
+  //     VRSamplesUtil.addError("exitPresent failed.", 2000);
+  //   });
+  // }
 
-  function onVRPresentChange () {
-    if (vrDisplay.isPresenting) {
-      if (vrDisplay.capabilities.hasExternalDisplay) {
-        VRSamplesUtil.removeButton(vrPresentButton);
-        vrPresentButton = VRSamplesUtil.addButton("Exit VR", "E", "css/baseline_cancel_presentation_white_24dp.png", onVRExitPresent);
-        canvasClip.classList.add("presenting");
+  // function onVRPresentChange () {
+  //   if (vrDisplay.isPresenting) {
+  //     if (vrDisplay.capabilities.hasExternalDisplay) {
+  //       VRSamplesUtil.removeButton(vrPresentButton);
+  //       vrPresentButton = VRSamplesUtil.addButton("Exit VR", "E", "css/baseline_cancel_presentation_white_24dp.png", onVRExitPresent);
+  //       canvasClip.classList.add("presenting");
 
-        // Set the size to half the width and height of the eye's render
-        // target. This makes the image proportional while also reducing the
-        // draw costs of mirroring it to the screen.
-        var leftEye = vrDisplay.getEyeParameters("left");
-        canvasClip.style.width = (leftEye.renderWidth/2) + "px";
-        canvasClip.style.height = (leftEye.renderHeight/2) + "px";
-      }
-    } else {
-      if (vrDisplay.capabilities.hasExternalDisplay) {
-        VRSamplesUtil.removeButton(vrPresentButton);
-        vrPresentButton = VRSamplesUtil.addButton("Enter VR", "E", "css/google-cardboard.png", onVRRequestPresent);
+  //       // Set the size to half the width and height of the eye's render
+  //       // target. This makes the image proportional while also reducing the
+  //       // draw costs of mirroring it to the screen.
+  //       var leftEye = vrDisplay.getEyeParameters("left");
+  //       canvasClip.style.width = (leftEye.renderWidth/2) + "px";
+  //       canvasClip.style.height = (leftEye.renderHeight/2) + "px";
+  //     }
+  //   } else {
+  //     if (vrDisplay.capabilities.hasExternalDisplay) {
+  //       VRSamplesUtil.removeButton(vrPresentButton);
+  //       vrPresentButton = VRSamplesUtil.addButton("Enter VR", "E", "css/google-cardboard.png", onVRRequestPresent);
 
-        // Reset the div to it's default size when we're done presenting.
-        canvasClip.classList.remove("presenting");
-        canvasClip.style.width = "";
-        canvasClip.style.height = "";
-      }
-    }
+  //       // Reset the div to it's default size when we're done presenting.
+  //       canvasClip.classList.remove("presenting");
+  //       canvasClip.style.width = "";
+  //       canvasClip.style.height = "";
+  //     }
+  //   }
 
-    // Make sure the canvas is resized AFTER we've updated the container div.
-    onResize();
-  }
+  //   // Make sure the canvas is resized AFTER we've updated the container div.
+  //   onResize();
+  // }
 
-  if (navigator.getVRDisplays) {
-    frameData = new VRFrameData();
-    navigator.getVRDisplays().then(function (displays) {
-      if (displays.length > 0) {
-        vrDisplay = displays[displays.length - 1];
-        initWebGL(vrDisplay.capabilities.hasExternalDisplay);
+  // OLD: webVR initialization
+  // if (navigator.getVRDisplays) {
+  //   frameData = new VRFrameData();
+  //   navigator.getVRDisplays().then(function (displays) {
+  //     if (displays.length > 0) {
+  //       vrDisplay = displays[displays.length - 1];
+  //       initWebGL(vrDisplay.capabilities.hasExternalDisplay);
+  //     } else {
+  //       //initWebGL(false);
+  //       $("#msg").hide();
+  //       VRSamplesUtil.addInfo("WebVR supported, but no VRDisplays found.", 3000);
+  //     }
+  //   }, function () {
+  //     $("#msg").hide();
+  //     VRSamplesUtil.addError("Your browser does not support WebVR. See <a href='http://webvr.info'>webvr.info</a> for assistance.");
+  //   });
+  // } else if (navigator.getVRDevices) {
+  //   //initWebGL(false);
+  //   $("#msg").hide();
+  //   VRSamplesUtil.addError("Your browser supports WebVR but not the latest version. See <a href='http://webvr.info'>webvr.info</a> for more info.");
+  // } else {
+  //   //initWebGL(false);
+  //   $("#msg").hide();
+  //   VRSamplesUtil.addError("Your browser does not support WebVR. See <a href='http://webvr.info'>webvr.info</a> for assistance.");
+  // }
+
+  // NEW: webXR intialization
+  if (navigator.xr) {
+    navigator.xr.isSessionSupported('immersive-vr').then(function(supported) {
+      if (supported) {
+        initWebGL(false);
       } else {
-        //initWebGL(false);
         $("#msg").hide();
-        VRSamplesUtil.addInfo("WebVR supported, but no VRDisplays found.", 3000);
+        VRSamplesUtil.addInfo("WebXR supported, but no XRDisplays found.", 3000);
       }
-    }, function () {
-      $("#msg").hide();
-      VRSamplesUtil.addError("Your browser does not support WebVR. See <a href='http://webvr.info'>webvr.info</a> for assistance.");
     });
-  } else if (navigator.getVRDevices) {
-    //initWebGL(false);
-    $("#msg").hide();
-    VRSamplesUtil.addError("Your browser supports WebVR but not the latest version. See <a href='http://webvr.info'>webvr.info</a> for more info.");
   } else {
-    //initWebGL(false);
     $("#msg").hide();
-    VRSamplesUtil.addError("Your browser does not support WebVR. See <a href='http://webvr.info'>webvr.info</a> for assistance.");
+    VRSamplesUtil.addError("Your browser does not support WebXR.", 3000);
   }
 
 
@@ -222,25 +253,26 @@ $( document ).ready(function() {
       scene.resize(webglCanvas.width * 0.5, webglCanvas.height);
   }
 
-  // Register for mouse restricted events while in VR
-  // (e.g. mouse no longer available on desktop 2D view)
-  function onDisplayPointerRestricted() {
-    if (webglCanvas && webglCanvas.requestPointerLock) {
-      webglCanvas.requestPointerLock();
-    }
-  }
+  // OLD: events no longer supported https://github.com/immersive-web/webxr/blob/master/webvr-migration.md#misc
+  // // Register for mouse restricted events while in VR
+  // // (e.g. mouse no longer available on desktop 2D view)
+  // function onDisplayPointerRestricted() {
+  //   if (webglCanvas && webglCanvas.requestPointerLock) {
+  //     webglCanvas.requestPointerLock();
+  //   }
+  // }
 
-  // Register for mouse unrestricted events while in VR
-  // (e.g. mouse once again available on desktop 2D view)
-  function onDisplayPointerUnrestricted() {
-    var lock = document.pointerLockElement;
-    if (lock && lock === webglCanvas && document.exitPointerLock) {
-      document.exitPointerLock();
-    }
-  }
+  // // Register for mouse unrestricted events while in VR
+  // // (e.g. mouse once again available on desktop 2D view)
+  // function onDisplayPointerUnrestricted() {
+  //   var lock = document.pointerLockElement;
+  //   if (lock && lock === webglCanvas && document.exitPointerLock) {
+  //     document.exitPointerLock();
+  //   }
+  // }
 
-  window.addEventListener('vrdisplaypointerrestricted', onDisplayPointerRestricted);
-  window.addEventListener('vrdisplaypointerunrestricted', onDisplayPointerUnrestricted);
+  // window.addEventListener('vrdisplaypointerrestricted', onDisplayPointerRestricted);
+  // window.addEventListener('vrdisplaypointerunrestricted', onDisplayPointerUnrestricted);
 
   function copyPose(a) {
     return {orientation: vec4.clone(a.orientation), position: vec3.clone(a.position)};
@@ -374,7 +406,7 @@ $( document ).ready(function() {
     }
   }
 
-  function onAnimationFrame (t) {
+  function onAnimationFrame (t, xrFrame) {
     // do not attempt to render if there is no available WebGL context
     if (!gl || !stats || !scene || !scene.ready) {
       window.requestAnimationFrame(onAnimationFrame);
@@ -382,40 +414,74 @@ $( document ).ready(function() {
     }
     stats.begin();
 
-    var vrGamepads = [];
-    if (vrDisplay) {
-      vrDisplay.requestAnimationFrame(onAnimationFrame);
+    // OLD: webVR
+    // var vrGamepads = [];
+    // if (vrDisplay) {
+    //   vrDisplay.requestAnimationFrame(onAnimationFrame);
 
-      vrDisplay.getFrameData(frameData);
+    //   vrDisplay.getFrameData(frameData);
 
-      var gamepads = navigator.getGamepads();
+    //   var gamepads = navigator.getGamepads();
 
-      for (var i = 0; i < gamepads.length; i++) {
-        var gamepad = gamepads[i];
-        if (gamepad && (gamepad.pose || gamepad.displayId))
-          vrGamepads.push(gamepad);
+    //   for (var i = 0; i < gamepads.length; i++) {
+    //     var gamepad = gamepads[i];
+    //     if (gamepad && (gamepad.pose || gamepad.displayId))
+    //       vrGamepads.push(gamepad);
+    //   }
+
+    //   prepareModelView(vrGamepads);
+
+    //   if (vrDisplay.isPresenting) {
+    //     scene.drawScene(currentPose, frameData.leftProjectionMatrix, frameData.leftViewMatrix, 0, 0, webglCanvas.width * 0.5, webglCanvas.height, true, 0, false);
+    //     var fb = scene.drawScene(currentPose, frameData.rightProjectionMatrix, frameData.rightViewMatrix, webglCanvas.width * 0.5, 0, webglCanvas.width * 0.5, webglCanvas.height, false, 0, true);
+    //     vrDisplay.submitFrame();
+    //     //scene.drawScene(currentPose, frameData.leftProjectionMatrix, frameData.leftViewMatrix, 0, 0, webglCanvas.width * 0.5, webglCanvas.height, true, 0, false);
+      
+    //   } else {
+
+    //     var modelViewMatrix = mat4.create();
+    //     mat4.translate(modelViewMatrix, modelViewMatrix, [tx, ty, center + zoom]); 
+    //     mat4.rotate(modelViewMatrix, modelViewMatrix, updown, [1, 0, 0]);      
+    //     mat4.rotate(modelViewMatrix, modelViewMatrix, -leftright, [0, 1, 0]);  
+    //     mat4.translate(modelViewMatrix, modelViewMatrix, [0, 0.0, -center]); 
+
+    //     mat4.perspective(projectionMat, Math.PI*0.4, webglCanvas.width/2 / webglCanvas.height, 0.1, 1024.0);
+
+    //     //scene.drawScene(modelViewMatrix, null, projectionMat, null, webglCanvas.width*0.25, 0, webglCanvas.width*0.5, webglCanvas.height, 0);
+    //     //stats.renderOrtho();
+    //   }
+
+    // NEW: webXR
+    if (xrSession) {
+      xrSession = xrFrame.session;
+      xrSession.requestAnimationFrame(onAnimationFrame);
+
+      // Get the XRDevice pose relative to the Reference Space we created
+      // earlier. The pose may not be available for a variety of reasons, so
+      // we'll exit the callback early if it comes back as null.
+      let pose = xrFrame.getViewerPose(xrReferenceSpace);
+      if (!pose) {
+        return;
       }
 
-      prepareModelView(vrGamepads);
+      let xrGamepads = [];
+      let xrInputSources = xrSession.inputSources;
+      for (let xrInputSource of xrInputSources) {
+        // TODO: May need to get pose differently, instead of passing gamepad: https://github.com/immersive-web/webxr/blob/master/webvr-migration.md#input
+        if (xrInputSource.gamepad) {
+          xrGamepads.push(xrInputSource.gamepad);
+        }
+      }
+      prepareModelView(xrGamepads);
 
-      if (vrDisplay.isPresenting) {
-        scene.drawScene(currentPose, frameData.leftProjectionMatrix, frameData.leftViewMatrix, 0, 0, webglCanvas.width * 0.5, webglCanvas.height, true, 0, false);
-        var fb = scene.drawScene(currentPose, frameData.rightProjectionMatrix, frameData.rightViewMatrix, webglCanvas.width * 0.5, 0, webglCanvas.width * 0.5, webglCanvas.height, false, 0, true);
-        vrDisplay.submitFrame();
-        //scene.drawScene(currentPose, frameData.leftProjectionMatrix, frameData.leftViewMatrix, 0, 0, webglCanvas.width * 0.5, webglCanvas.height, true, 0, false);
-      
-      } else {
+      // Ensure we're rendering to the layer's backbuffer.
+      let layer = xrSession.renderState.baseLayer;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
 
-        var modelViewMatrix = mat4.create();
-        mat4.translate(modelViewMatrix, modelViewMatrix, [tx, ty, center + zoom]); 
-        mat4.rotate(modelViewMatrix, modelViewMatrix, updown, [1, 0, 0]);      
-        mat4.rotate(modelViewMatrix, modelViewMatrix, -leftright, [0, 1, 0]);  
-        mat4.translate(modelViewMatrix, modelViewMatrix, [0, 0.0, -center]); 
-
-        mat4.perspective(projectionMat, Math.PI*0.4, webglCanvas.width/2 / webglCanvas.height, 0.1, 1024.0);
-
-        //scene.drawScene(modelViewMatrix, null, projectionMat, null, webglCanvas.width*0.25, 0, webglCanvas.width*0.5, webglCanvas.height, 0);
-        //stats.renderOrtho();
+      var views = xrFrame.getViewerPose(xrReferenceSpace).views;
+      if (views) {
+        scene.drawScene(currentPose, views[0].projectionMatrix, views[0].transform.inverse.matrix, 0, 0, webglCanvas.width * 0.5, webglCanvas.height, true, 0, false);
+        var fb = scene.drawScene(currentPose, views[1].projectionMatrix, views[1].transform.inverse.matrix, webglCanvas.width * 0.5, 0, webglCanvas.width * 0.5, webglCanvas.height, false, 0, true);
       }
     } else {
       var modelViewMatrix = mat4.create();
