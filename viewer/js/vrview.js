@@ -15,6 +15,7 @@ $( document ).ready(function() {
 
   // var vrDisplay = null; // OLD
   var xrSession = null;
+  var xrReferenceSpace = null;
   // var frameData = null; // OLD
   // var projectionMat = mat4.create(); // Doesn't appear to be used, even in original script?
   var identityMat = mat4.create();
@@ -87,8 +88,8 @@ $( document ).ready(function() {
     gl.blendEquation( gl.FUNC_ADD );
     gl.blendFunc( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA );
 
-    window.addEventListener("resize", onResize, false);
-    onResize();
+    // window.addEventListener("resize", onResize, false);
+    // onResize();
 
     scene = new Scene(gl, GETscene, webglCanvas.width / 2, webglCanvas.height);
     window.requestAnimationFrame(onCheckingStatusBar);
@@ -118,29 +119,31 @@ $( document ).ready(function() {
       // window.addEventListener('vrdisplayactivate', onVRRequestPresent, false);
       // window.addEventListener('vrdisplaydeactivate', onVRExitPresent, false);
 
-      window.requestAnimationFrame(onAnimationFrame);
+      // OLD - moved to onVRRequestPresent
+      // window.requestAnimationFrame(onAnimationFrame);
     }
   }
-  function resetPose() {
-    preGL = mat4.create();
-    mat4.translate(preGL, preGL, [0, 0.0, -0.5]); 
-    //mat4.scale(preGL, preGL, [1/planes[0], 1/planes[0], 1/planes[0]]);
-    mat4.scale(preGL, preGL, [1/planes[0][0], 1/planes[0][0], 1/planes[0][0]]);
-    //mat4.translate(preGL, preGL, [0, 0.0, planes[0]]); 
-    mat4.translate(preGL, preGL, [0, 0.0, planes[0][0]]); 
+  // function resetPose() {
+  //   preGL = mat4.create();
+  //   mat4.translate(preGL, preGL, [0, 0.0, -0.5]); 
+  //   //mat4.scale(preGL, preGL, [1/planes[0], 1/planes[0], 1/planes[0]]);
+  //   mat4.scale(preGL, preGL, [1/planes[0][0], 1/planes[0][0], 1/planes[0][0]]);
+  //   //mat4.translate(preGL, preGL, [0, 0.0, planes[0]]); 
+  //   mat4.translate(preGL, preGL, [0, 0.0, planes[0][0]]); 
 
-    headPose = vrDisplay.getPose();
-    var headOrigin = headPose.position;
-    var headOrientation = headPose.orientation;
-    headOrientation[2] = 0;
-    headOrientation[0] = 0;
+  //   headPose = vrDisplay.getPose();
+  //   var headOrigin = headPose.position;
+  //   var headOrientation = headPose.orientation;
+  //   headOrientation[2] = 0;
+  //   headOrientation[0] = 0;
 
-    mat4.fromRotationTranslation(currentPose, headOrientation, headOrigin);
-    mat4.multiply(currentPose, currentPose, preGL);
-  }
+  //   mat4.fromRotationTranslation(currentPose, headOrientation, headOrigin);
+  //   mat4.multiply(currentPose, currentPose, preGL);
+  // }
 
-  function onVRRequestPresent () {
-    resetPose();
+  async function onVRRequestPresent () {
+    // resetPose();
+
     // vrDisplay.requestPresent([{ source: webglCanvas }]).then(function () {
     // }, function (err) {
     //   var errMsg = "requestPresent failed.";
@@ -151,7 +154,10 @@ $( document ).ready(function() {
     // });
     xrSession = await navigator.xr.requestSession('immersive-vr');
     let xrLayer = new XRWebGLLayer(xrSession, gl);
-    session.updateRenderState({ baseLayer: xrLayer });
+    xrSession.updateRenderState({ baseLayer: xrLayer });
+
+    xrReferenceSpace = await xrSession.requestReferenceSpace("viewer");
+    xrSession.requestAnimationFrame(onAnimationFrame)
   }
 
   // OLD
@@ -237,21 +243,21 @@ $( document ).ready(function() {
   }
 
 
-  function onResize () {
-    console.log("resize()");
-    if (vrDisplay && vrDisplay.isPresenting) {
-      var leftEye = vrDisplay.getEyeParameters("left");
-      var rightEye = vrDisplay.getEyeParameters("right");
+  // function onResize () {
+  //   console.log("resize()");
+  //   if (vrDisplay && vrDisplay.isPresenting) {
+  //     var leftEye = vrDisplay.getEyeParameters("left");
+  //     var rightEye = vrDisplay.getEyeParameters("right");
 
-      webglCanvas.width = Math.max(leftEye.renderWidth, rightEye.renderWidth) * 2;
-      webglCanvas.height = Math.max(leftEye.renderHeight, rightEye.renderHeight);
-    } else {
-      webglCanvas.width = webglCanvas.offsetWidth * window.devicePixelRatio;
-      webglCanvas.height = webglCanvas.offsetHeight * window.devicePixelRatio;
-    }
-    if (scene) 
-      scene.resize(webglCanvas.width * 0.5, webglCanvas.height);
-  }
+  //     webglCanvas.width = Math.max(leftEye.renderWidth, rightEye.renderWidth) * 2;
+  //     webglCanvas.height = Math.max(leftEye.renderHeight, rightEye.renderHeight);
+  //   } else {
+  //     webglCanvas.width = webglCanvas.offsetWidth * window.devicePixelRatio;
+  //     webglCanvas.height = webglCanvas.offsetHeight * window.devicePixelRatio;
+  //   }
+  //   if (scene) 
+  //     scene.resize(webglCanvas.width * 0.5, webglCanvas.height);
+  // }
 
   // OLD: events no longer supported https://github.com/immersive-web/webxr/blob/master/webvr-migration.md#misc
   // // Register for mouse restricted events while in VR
@@ -452,6 +458,7 @@ $( document ).ready(function() {
     //   }
 
     // NEW: webXR
+    // if xrSession is not yet defined, this function never invokes itself again.
     if (xrSession) {
       xrSession = xrFrame.session;
       xrSession.requestAnimationFrame(onAnimationFrame);
