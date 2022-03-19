@@ -109,17 +109,14 @@ $( document ).ready(async function() {
       window.addEventListener('vrdisplaypresentchange', onVRPresentChange, false);
       window.addEventListener('vrdisplayactivate', onVRRequestPresent, false);
       window.addEventListener('vrdisplaydeactivate', onVRExitPresent, false);
-
-      window.requestAnimationFrame(onAnimationFrame);
     }
   }
-  function resetPose() {
+  function resetPose(headPose) {
     preGL = mat4.create();
     mat4.translate(preGL, preGL, [0, 0.0, -0.5]); 
     mat4.scale(preGL, preGL, [1/planes[0][0], 1/planes[0][0], 1/planes[0][0]]);
     mat4.translate(preGL, preGL, [0, 0.0, planes[0][0]]); 
 
-    headPose = vrDisplay.getPose();
     var headOrigin = headPose.position;
     var headOrientation = headPose.orientation;
     headOrientation[2] = 0;
@@ -135,8 +132,8 @@ $( document ).ready(async function() {
     xrSession.updateRenderState({ baseLayer: xrLayer });
 
     xrReferenceSpace = await xrSession.requestReferenceSpace("local");
-    
-    // resetPose(); // TODO: call on first animation callback
+
+    xrSession.requestAnimationFrame(onAnimationFrame);
   }
 
   function onVRExitPresent () {
@@ -354,57 +351,88 @@ $( document ).ready(async function() {
     }
   }
 
-  function onAnimationFrame (t) {
+  _hasResetPose = false;
+
+  function onAnimationFrame (t, xrFrame) {
     // do not attempt to render if there is no available WebGL context
     if (!gl || !stats || !scene || !scene.ready) {
-      window.requestAnimationFrame(onAnimationFrame);
+      xrSession.requestAnimationFrame(onAnimationFrame);
       return;
     }
     stats.begin();
 
-    var vrGamepads = [];
-    if (vrDisplay) {
-      vrDisplay.requestAnimationFrame(onAnimationFrame);
+    xrSession.requestAnimationFrame(onAnimationFrame);
 
-      vrDisplay.getFrameData(frameData);
+    // TODO: get gamepads -> prepareModelView
 
-      var gamepads = navigator.getGamepads();
-
-      for (var i = 0; i < gamepads.length; i++) {
-        var gamepad = gamepads[i];
-        if (gamepad && (gamepad.pose || gamepad.displayId))
-          vrGamepads.push(gamepad);
-      }
-
-      prepareModelView(vrGamepads);
-
-      if (vrDisplay.isPresenting) {
-        scene.drawScene(currentPose, frameData.leftProjectionMatrix, frameData.leftViewMatrix, 0, 0, webglCanvas.width * 0.5, webglCanvas.height, true, 0, false);
-        var fb = scene.drawScene(currentPose, frameData.rightProjectionMatrix, frameData.rightViewMatrix, webglCanvas.width * 0.5, 0, webglCanvas.width * 0.5, webglCanvas.height, false, 0, true);
-        vrDisplay.submitFrame();
-      
-      } else {
-
-        var modelViewMatrix = mat4.create();
-        mat4.translate(modelViewMatrix, modelViewMatrix, [tx, ty, center + zoom]); 
-        mat4.rotate(modelViewMatrix, modelViewMatrix, updown, [1, 0, 0]);      
-        mat4.rotate(modelViewMatrix, modelViewMatrix, -leftright, [0, 1, 0]);  
-        mat4.translate(modelViewMatrix, modelViewMatrix, [0, 0.0, -center]); 
-
-        mat4.perspective(projectionMat, Math.PI*0.4, webglCanvas.width/2 / webglCanvas.height, 0.1, 1024.0);
-      }
-    } else {
-      var modelViewMatrix = mat4.create();
-      mat4.translate(modelViewMatrix, modelViewMatrix, [tx, ty, center + zoom]); 
-      mat4.rotate(modelViewMatrix, modelViewMatrix, updown, [1, 0, 0]);      
-      mat4.rotate(modelViewMatrix, modelViewMatrix, -leftright, [0, 1, 0]);  
-      mat4.translate(modelViewMatrix, modelViewMatrix, [0, 0.0, -center]); 
-
-      scene.drawScene(modelViewMatrix, identityMat, null, null, webglCanvas.width*0.25, 0, webglCanvas.width*0.5, webglCanvas.height, 0);
+    // Get the XRDevice pose relative to the Reference Space we created
+    // earlier. The pose may not be available for a variety of reasons, so
+    // we'll exit the callback early if it comes back as null.
+    let pose = xrFrame.getViewerPose(xrReferenceSpace);
+    if (!pose) {
+      return;
     }
 
-    stats.end();
+    if (!_hasResetPose) {
+      _hasResetPose = true;
+      resetPose(pose.views[0].transform);
+    }
+
+    // Ensure we're rendering to the layer's backbuffer.
+    let layer = xrSession.renderState.baseLayer;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
+
+    // Loop through each of the views reported by the viewer pose.
+    for (let i = 0; i < pose.views.length; i++) {
+      let view = pose.views[i];
+      let viewport = layer.getViewport(view);
+      scene.drawScene(currentPose, view.projectionMatrix, view.transform.inverse.matrix, viewport.x, viewport.y, viewport.width, viewport.height, i == pose.views.length - 1, 0);
+    }
   }
+
+  //   var vrGamepads = [];
+  //   if (vrDisplay) {
+  //     vrDisplay.requestAnimationFrame(onAnimationFrame);
+
+  //     vrDisplay.getFrameData(frameData);
+
+  //     var gamepads = navigator.getGamepads();
+
+  //     for (var i = 0; i < gamepads.length; i++) {
+  //       var gamepad = gamepads[i];
+  //       if (gamepad && (gamepad.pose || gamepad.displayId))
+  //         vrGamepads.push(gamepad);
+  //     }
+
+  //     prepareModelView(vrGamepads);
+
+  //     if (vrDisplay.isPresenting) {
+  //       scene.drawScene(currentPose, frameData.leftProjectionMatrix, frameData.leftViewMatrix, 0, 0, webglCanvas.width * 0.5, webglCanvas.height, true, 0, false);
+  //       var fb = scene.drawScene(currentPose, frameData.rightProjectionMatrix, frameData.rightViewMatrix, webglCanvas.width * 0.5, 0, webglCanvas.width * 0.5, webglCanvas.height, false, 0, true);
+  //       vrDisplay.submitFrame();
+      
+  //     } else {
+
+  //       var modelViewMatrix = mat4.create();
+  //       mat4.translate(modelViewMatrix, modelViewMatrix, [tx, ty, center + zoom]); 
+  //       mat4.rotate(modelViewMatrix, modelViewMatrix, updown, [1, 0, 0]);      
+  //       mat4.rotate(modelViewMatrix, modelViewMatrix, -leftright, [0, 1, 0]);  
+  //       mat4.translate(modelViewMatrix, modelViewMatrix, [0, 0.0, -center]); 
+
+  //       mat4.perspective(projectionMat, Math.PI*0.4, webglCanvas.width/2 / webglCanvas.height, 0.1, 1024.0);
+  //     }
+  //   } else {
+  //     var modelViewMatrix = mat4.create();
+  //     mat4.translate(modelViewMatrix, modelViewMatrix, [tx, ty, center + zoom]); 
+  //     mat4.rotate(modelViewMatrix, modelViewMatrix, updown, [1, 0, 0]);      
+  //     mat4.rotate(modelViewMatrix, modelViewMatrix, -leftright, [0, 1, 0]);  
+  //     mat4.translate(modelViewMatrix, modelViewMatrix, [0, 0.0, -center]); 
+
+  //     scene.drawScene(modelViewMatrix, identityMat, null, null, webglCanvas.width*0.25, 0, webglCanvas.width*0.5, webglCanvas.height, 0);
+  //   }
+
+  //   stats.end();
+  // }
 
 
   const canvas = webglCanvas;
