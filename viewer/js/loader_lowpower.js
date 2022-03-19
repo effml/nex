@@ -34,6 +34,7 @@ function UrlExists(url) {
 
 var GETscene = getUrlParameter('scene');
 var GETvr = getUrlParameter('vr');
+var GETxr = getUrlParameter('xr');
 var GETversion = getUrlParameter('ver');
 
 if (GETscene.indexOf("cs://") != -1) {
@@ -64,8 +65,10 @@ $.getScript(GETscene + '/config.js', function() {
 
 
   $.getScript(scf, function() {
-    $.getScript(GETvr ? 'js/vrview.js' : 'js/webview_lowpower.js?v=1', function() {
-    });
+    let script = 'js/webview.js?v=1';
+    if (GETxr) script = 'js/xrview.js';
+    if (GETvr) script = 'js/vrview.js';
+    $.getScript(script);
   });
 });
 
