@@ -11,15 +11,20 @@ $( document ).ready(async function() {
   if (window.location.href.indexOf('http') == -1)
     window.location.href = (window.location.href.replace("file:///var/www/html", "http://localhost"));
 
-  var vrDisplay = null;
-  var frameData = null;
   var projectionMat = mat4.create();
   var identityMat = mat4.create();
   var vrPresentButton = null;
 
   // ================================
-  // WebVR-specific code begins here.
+  // WebXR-specific code begins here.
   // ================================
+
+  // WebXR setup
+  var xrSession = null;
+  var xrReferenceSpace = null;
+  var vrDisplay = null;
+  var frameData = null;
+  // TODO: find references to vrDisplay, frameData
 
   // WebGL setup.
   var gl = null;
@@ -65,7 +70,8 @@ $( document ).ready(async function() {
     var glAttribs = {
       alpha: false,
       antialias: true,
-      preserveDrawingBuffer: preserveDrawingBuffer
+      preserveDrawingBuffer: preserveDrawingBuffer,
+      xrCompatible: true,
     };
     var contextTypes = "webgl2";
     gl = webglCanvas.getContext(contextTypes, glAttribs);
@@ -123,16 +129,14 @@ $( document ).ready(async function() {
     mat4.multiply(currentPose, currentPose, preGL);
   }
 
-  function onVRRequestPresent () {
-    resetPose();
-    vrDisplay.requestPresent([{ source: webglCanvas }]).then(function () {
-    }, function (err) {
-      var errMsg = "requestPresent failed.";
-      if (err && err.message) {
-        errMsg += "<br/>" + err.message
-      }
-      VRSamplesUtil.addError(errMsg, 2000);
-    });
+  async function onVRRequestPresent () {
+    xrSession = await navigator.xr.requestSession('immersive-vr');
+    let xrLayer = new XRWebGLLayer(xrSession, gl);
+    xrSession.updateRenderState({ baseLayer: xrLayer });
+
+    xrReferenceSpace = await xrSession.requestReferenceSpace("local");
+    
+    // resetPose(); // TODO: call on first animation callback
   }
 
   function onVRExitPresent () {
