@@ -115,9 +115,7 @@ $( document ).ready(function() {
   function resetPose() {
     preGL = mat4.create();
     mat4.translate(preGL, preGL, [0, 0.0, -0.5]); 
-    //mat4.scale(preGL, preGL, [1/planes[0], 1/planes[0], 1/planes[0]]);
     mat4.scale(preGL, preGL, [1/planes[0][0], 1/planes[0][0], 1/planes[0][0]]);
-    //mat4.translate(preGL, preGL, [0, 0.0, planes[0]]); 
     mat4.translate(preGL, preGL, [0, 0.0, planes[0][0]]); 
 
     headPose = vrDisplay.getPose();
@@ -189,7 +187,6 @@ $( document ).ready(function() {
         vrDisplay = displays[displays.length - 1];
         initWebGL(vrDisplay.capabilities.hasExternalDisplay);
       } else {
-        //initWebGL(false);
         $("#msg").hide();
         VRSamplesUtil.addInfo("WebVR supported, but no VRDisplays found.", 3000);
       }
@@ -198,11 +195,9 @@ $( document ).ready(function() {
       VRSamplesUtil.addError("Your browser does not support WebVR. See <a href='http://webvr.info'>webvr.info</a> for assistance.");
     });
   } else if (navigator.getVRDevices) {
-    //initWebGL(false);
     $("#msg").hide();
     VRSamplesUtil.addError("Your browser supports WebVR but not the latest version. See <a href='http://webvr.info'>webvr.info</a> for more info.");
   } else {
-    //initWebGL(false);
     $("#msg").hide();
     VRSamplesUtil.addError("Your browser does not support WebVR. See <a href='http://webvr.info'>webvr.info</a> for assistance.");
   }
@@ -287,9 +282,6 @@ $( document ).ready(function() {
         } else {
           gpFirstPose[i] = null;
         }
-        //if (gp.buttons[1].pressed) {
-        //console.log(vrDisplay.getPose().position);
-        //}
       }
 
       if (controlState == 2 && oldControlState != 2) {
@@ -368,11 +360,6 @@ $( document ).ready(function() {
       }
 
       oldControlState = controlState;
-
-      //var gamepadMat = mat4.create();
-      //getPoseMatrix(gamepadMat, vrGamepads[0].pose, true, vrDisplay);
-      //mat4.rotate(gamepadMat, gamepadMat, -0.8, [1, 0, 0]);       
-      //mat4.multiply(modelViewMatrix, gamepadMat, modelViewMatrix);
     }
   }
 
@@ -404,7 +391,6 @@ $( document ).ready(function() {
         scene.drawScene(currentPose, frameData.leftProjectionMatrix, frameData.leftViewMatrix, 0, 0, webglCanvas.width * 0.5, webglCanvas.height, true, 0, false);
         var fb = scene.drawScene(currentPose, frameData.rightProjectionMatrix, frameData.rightViewMatrix, webglCanvas.width * 0.5, 0, webglCanvas.width * 0.5, webglCanvas.height, false, 0, true);
         vrDisplay.submitFrame();
-        //scene.drawScene(currentPose, frameData.leftProjectionMatrix, frameData.leftViewMatrix, 0, 0, webglCanvas.width * 0.5, webglCanvas.height, true, 0, false);
       
       } else {
 
@@ -415,9 +401,6 @@ $( document ).ready(function() {
         mat4.translate(modelViewMatrix, modelViewMatrix, [0, 0.0, -center]); 
 
         mat4.perspective(projectionMat, Math.PI*0.4, webglCanvas.width/2 / webglCanvas.height, 0.1, 1024.0);
-
-        //scene.drawScene(modelViewMatrix, null, projectionMat, null, webglCanvas.width*0.25, 0, webglCanvas.width*0.5, webglCanvas.height, 0);
-        //stats.renderOrtho();
       }
     } else {
       var modelViewMatrix = mat4.create();
@@ -426,11 +409,7 @@ $( document ).ready(function() {
       mat4.rotate(modelViewMatrix, modelViewMatrix, -leftright, [0, 1, 0]);  
       mat4.translate(modelViewMatrix, modelViewMatrix, [0, 0.0, -center]); 
 
-      //mat4.perspective(projectionMat, Math.PI*0.4, webglCanvas.width/2 / webglCanvas.height, 0.1, 1024.0);
-
       scene.drawScene(modelViewMatrix, identityMat, null, null, webglCanvas.width*0.25, 0, webglCanvas.width*0.5, webglCanvas.height, 0);
-
-      //stats.renderOrtho();
     }
 
     stats.end();
@@ -482,7 +461,7 @@ $( document ).ready(function() {
     updown += dY * rotation_factor;
 
     e.preventDefault();
-    //console.log(updown);
+    console.log(updown);
   };
 
   var mousewheel = function(e) {
