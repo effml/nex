@@ -6,7 +6,7 @@ var is_dolly = 0;
 var dolly = 1;
 var pivoting = -1;
 
-$( document ).ready(function() {
+$( document ).ready(async function() {
   document.getElementById("glcanvas").remove();
   if (window.location.href.indexOf('http') == -1)
     window.location.href = (window.location.href.replace("file:///var/www/html", "http://localhost"));
@@ -59,7 +59,7 @@ $( document ).ready(function() {
   var canvasClip = document.getElementById("canvas-clip");
   canvasClip.style.display = "none";
 
-  function initWebGL (preserveDrawingBuffer) {
+  function initWebGL (preserveDrawingBuffer=false) { // TODO: replace all calls with false
     console.log("init");
 
     var glAttribs = {
@@ -68,7 +68,7 @@ $( document ).ready(function() {
       preserveDrawingBuffer: preserveDrawingBuffer
     };
     var contextTypes = "webgl2";
-    gl = webglCanvas.getContext("webgl2", glAttribs);
+    gl = webglCanvas.getContext(contextTypes, glAttribs);
 
     if (!gl) {
       VRSamplesUtil.addError("Your browser does not support webgl2");
@@ -98,12 +98,7 @@ $( document ).ready(function() {
     }else{
       $("#msg").hide();
       //display VR button
-      if (vrDisplay.capabilities.canPresent)
       vrPresentButton = VRSamplesUtil.addButton("Enter VR", "E", "css/google-cardboard.png", onVRRequestPresent);
-
-      // For the benefit of automated testing. Safe to ignore.
-      if (vrDisplay.capabilities.canPresent && WGLUUrl.getBool('canvasClickPresents', false))
-        webglCanvas.addEventListener("click", onVRRequestPresent, false);
 
       window.addEventListener('vrdisplaypresentchange', onVRPresentChange, false);
       window.addEventListener('vrdisplayactivate', onVRRequestPresent, false);
@@ -180,26 +175,18 @@ $( document ).ready(function() {
     onResize();
   }
 
-  if (navigator.getVRDisplays) {
-    frameData = new VRFrameData();
-    navigator.getVRDisplays().then(function (displays) {
-      if (displays.length > 0) {
-        vrDisplay = displays[displays.length - 1];
-        initWebGL(vrDisplay.capabilities.hasExternalDisplay);
-      } else {
-        $("#msg").hide();
-        VRSamplesUtil.addInfo("WebVR supported, but no VRDisplays found.", 3000);
-      }
-    }, function () {
+  if (navigator.xr) {
+    // TODO: set frameData, vrDisplay
+    let supported = await navigator.xr.isSessionSupported('immersive-vr');
+    if (supported) {
+      initWebGL(false);
+    } else {
       $("#msg").hide();
-      VRSamplesUtil.addError("Your browser does not support WebVR. See <a href='http://webvr.info'>webvr.info</a> for assistance.");
-    });
-  } else if (navigator.getVRDevices) {
-    $("#msg").hide();
-    VRSamplesUtil.addError("Your browser supports WebVR but not the latest version. See <a href='http://webvr.info'>webvr.info</a> for more info.");
+      VRSamplesUtil.addError("Your browser does support immersive VR. See <a href='http://webxr.info'>webxr.info</a> for assistance.");
+    }
   } else {
     $("#msg").hide();
-    VRSamplesUtil.addError("Your browser does not support WebVR. See <a href='http://webvr.info'>webvr.info</a> for assistance.");
+    VRSamplesUtil.addError("Your browser does not support WebXR. See <a href='http://webxr.info'>webxr.info</a> for assistance.");
   }
 
 
